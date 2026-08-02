@@ -1,8 +1,8 @@
 import 'dart:io';
+import 'package:ecommerce_app_api_26/features/profile/cubit/image_cubit/image_cubit.dart';
+import 'package:ecommerce_app_api_26/features/profile/cubit/image_cubit/image_state.dart';
 import 'package:ecommerce_app_api_26/features/profile/cubit/profile_cubit.dart';
-import 'package:ecommerce_app_api_26/features/profile/data/models/avatar_model.dart';
 import 'package:ecommerce_app_api_26/features/profile/data/models/profile_model.dart';
-import 'package:ecommerce_app_api_26/features/profile/data/profile_api/profile_api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
@@ -15,18 +15,18 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  late Future<ProfileModel> _profileFuture;
+  // late Future<ProfileModel> _profileFuture;
   bool _isUploadingImage = false;
 
-  @override
-  void initState() {
-    super.initState();
-    _loadProfile();
-  }
+  // @override
+  // void initState() {
+  //   super.initState();
+  //   _loadProfile();
+  // }
 
-  void _loadProfile() {
-    _profileFuture = ProfileApi().getProfile();
-  }
+  // void _loadProfile() {
+  //   _profileFuture = ProfileApi().getProfile();
+  // }
 
   Future<void> _pickAndUploadImage(ImageSource source, int userId) async {
     Navigator.pop(context);
@@ -34,36 +34,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final XFile? pickedFile = await picker.pickImage(source: source);
 
     if (pickedFile != null) {
-      setState(() {
-        _isUploadingImage = true;
-      });
-
-      try {
-        File imageFile = File(pickedFile.path);
-
-        AvatarModel avatarModel = await ProfileApi().uploadImage(imageFile);
-
-        await ProfileApi().updateProfileAvatar(userId, avatarModel.location!);
-
-        setState(() {
-          _loadProfile();
-          _isUploadingImage = false;
-        });
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('تم تحديث الصورة بنجاح!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      } catch (e) {
-        setState(() {
-          _isUploadingImage = false;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
-        );
-      }
+      context.read<ImageCubit>().updateImage(
+        imageFile: File(pickedFile.path),
+        userId: userId,
+      );
     }
   }
 
@@ -102,7 +76,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (_) => ProfileCubit()..getProfile(),
+      create: (_) => ImageCubit(),
       child: Scaffold(
         backgroundColor: Colors.grey.shade50,
         body: BlocConsumer<ProfileCubit, ProfileState>(
@@ -136,57 +110,87 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                       child: Row(
                         children: [
-                          // استخدمنا Stack هنا عشان نحط زرار التعديل فوق الصورة
-                          Stack(
-                            alignment: Alignment.bottomRight,
-                            children: [
-                              Container(
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: Colors.white,
-                                    width: 3,
+                          BlocConsumer<ImageCubit, ImageState>(
+                            listener: (context, state) {
+                              if (state is ImageLoading) {
+                                setState(() {
+                                  _isUploadingImage = true;
+                                });
+                              } else if (state is ImageSuccess) {
+                                setState(() {
+                                  _isUploadingImage = false;
+                                });
+                                context.read<ProfileCubit>().getProfile();
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text("Image updated successfully"),
                                   ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withOpacity(0.1),
-                                      blurRadius: 10,
+                                );
+                              } else if (state is ImageError) {
+                                setState(() {
+                                  _isUploadingImage = false;
+                                });
+
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(state.errorMessage),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                              }
+                            },
+                            builder: (context, state) {
+                              return Stack(
+                                alignment: Alignment.bottomRight,
+                                children: [
+                                  Container(
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: Colors.white,
+                                        width: 3,
+                                      ),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withOpacity(0.1),
+                                          blurRadius: 10,
+                                        ),
+                                      ],
                                     ),
-                                  ],
-                                ),
-                                child: CircleAvatar(
-                                  radius: 40,
-                                  backgroundColor: Colors.white,
-                                  backgroundImage: NetworkImage(
-                                    profile.avatar ??
-                                        "https://i.imgur.com/LDOO4Qs.jpg",
+                                    child: CircleAvatar(
+                                      radius: 40,
+                                      backgroundColor: Colors.white,
+                                      backgroundImage: NetworkImage(
+                                        profile.avatar ??
+                                            "https://i.imgur.com/LDOO4Qs.jpg",
+                                      ),
+                                      child: _isUploadingImage
+                                          ? const CircularProgressIndicator(
+                                              color: Colors.white,
+                                            )
+                                          : null,
+                                    ),
                                   ),
-                                  child: _isUploadingImage
-                                      ? const CircularProgressIndicator(
-                                          color: Colors.white,
-                                        )
-                                      : null,
-                                ),
-                              ),
-                              // زرار التعديل
-                              GestureDetector(
-                                onTap: _isUploadingImage
-                                    ? null
-                                    : () => _showImageSourceSheet(profile.id!),
-                                child: Container(
-                                  padding: const EdgeInsets.all(4),
-                                  decoration: const BoxDecoration(
-                                    color: Colors.white,
-                                    shape: BoxShape.circle,
+                                  GestureDetector(
+                                    onTap: _isUploadingImage
+                                        ? null
+                                        : () => _showImageSourceSheet(profile.id!),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(4),
+                                      decoration: const BoxDecoration(
+                                        color: Colors.white,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(
+                                        Icons.camera_alt,
+                                        color: Colors.blue,
+                                         size: 20,
+                                      ),
+                                    ),
                                   ),
-                                  child: const Icon(
-                                    Icons.camera_alt,
-                                    color: Colors.blue,
-                                    size: 20,
-                                  ),
-                                ),
-                              ),
-                            ],
+                                ],
+                              );
+                            },
                           ),
                           const SizedBox(width: 20),
                           Column(
